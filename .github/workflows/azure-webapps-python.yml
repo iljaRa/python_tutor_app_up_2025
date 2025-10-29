@@ -1,0 +1,51 @@
+name: Deploy frontend
+run-name: ${{ github.actor }} deploying 🚀
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - id: checkout
+        name: Checkout
+        uses: actions/checkout@v4
+
+      # https://github.com/docker/login-action
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+      - name: Build the Docker image
+        run: docker compose -f docker-compose.yml build --build-arg TOGETHER_API_KEY=${{ secrets.TOGETHER_API_KEY }} --build-arg LANGCHAIN_API_KEY=${{ secrets.LANGCHAIN_API_KEY }} --build-arg PYTUTOR_USERNAME=${{ secrets.PYTUTOR_USERNAME }} --build-arg PYTUTOR_PASSWORD=${{ secrets.PYTUTOR_PASSWORD }}
+
+      - name: Tag the Docker image with SHA
+        run: docker tag python-tutor ${{ secrets.DOCKERHUB_USERNAME }}/up_projects:latest
+
+      - name: Push the Docker image to Docker Hub
+        run: docker push ${{ secrets.DOCKERHUB_USERNAME }}/up_projects:latest
+
+      # # https://github.com/Azure/login
+      - name: Login to Azure App Service
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # https://github.com/marketplace/actions/azure-webapp
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: python-tutor
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/up_projects:latest
